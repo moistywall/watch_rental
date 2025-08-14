@@ -1,4 +1,5 @@
 mod url_store;
+mod crawler;
 use crate::url_store::{SiteType, UrlStore};
 
 fn main() {
