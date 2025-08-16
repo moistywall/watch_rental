@@ -2,7 +2,7 @@ use crate::url_store::SiteType;
 use std::fmt;
 
 #[derive(Debug)]
-enum ScraperError {
+pub enum ScraperError {
     InvalidUrl(String),
     RequestFailed(String, reqwest::Error),
     ParseError(String),
@@ -11,22 +11,29 @@ enum ScraperError {
 impl fmt::Display for ScraperError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ScraperError::InvalidUrl(url) => write!(f, "無効なURLです {}", url),
-            ScraperError::RequestFailed(url, e) => write!(f, "リクエストに失敗しました ({}): {}", url, e),
-            ScraperError::ParseError(msg) => write!(f, "スクレイピングに失敗しました: {}", msg),
+            ScraperError::InvalidUrl(url) => write!(f, "無効なURLです: {}", url),
+            ScraperError::RequestFailed(url, e) => write!(f, "リクエスト失敗 ({}): {}", url, e),
+            ScraperError::ParseError(msg) => write!(f, "スクレイピング失敗: {}", msg),
         }
     }
 }
 
-type RoomInfo = Vec<(String, Option<usize>)>;
+/// 1件のスクレイピング結果
+#[derive(Debug)]
+pub struct CrawlResult {
+    url: String,                    // スクレイプ対象 URL
+    room_count: Option<usize>,      // Some(>0): 部屋数あり，Some(0) or None: 空き部屋なし
+    property_name: Option<String>,  // 拡張用
+    city: Option<String>,           // 拡張用
+}
 
-struct SearchTarget {
+struct Scraper {
     site: SiteType,
     selector_str: &'static str,
 }
 
-impl SearchTarget {
-    fn new(site: SiteType) -> Self {
+impl Scraper {
+    pub fn new(site: SiteType) -> Self {
         let selector_str = match site {
             SiteType::Homes => "p.text-sm.mt-2 > span",
             SiteType::Suumo => "p > span.fs13",
@@ -38,7 +45,7 @@ impl SearchTarget {
         }
     }
 
-    fn get_number_of_rent(&self, url: &str) -> Result<Option<usize>, ScraperError> {
+    pub fn scrape_url(&self, url: &str) -> Result<CrawlResult, ScraperError> {
         if url.is_empty() || !url.starts_with("http") {
             return Err(ScraperError::InvalidUrl(url.to_string()));
         }
@@ -52,15 +59,23 @@ impl SearchTarget {
         let selector = scraper::Selector::parse(self.selector_str)
             .map_err(|_| ScraperError::ParseError("セレクタが不正".to_string()))?;
 
-        let elements = document.select(&selector);
-        for e in elements {
+        let mut room_count = None;
+
+        for e in document.select(&selector) {
             if let Some(text) = e.text().next() {
                 let digit_only: String = text.chars().filter(|c| c.is_ascii_digit()).collect();
                 if let Ok(count) = digit_only.parse::<usize>() {
-                    return Ok(Some(count));
+                    room_count = Some(count);
+                    break;
                 }
             }
         }
-        Ok(None)
+
+        Ok(CrawlResult {
+            url: url.to_string(),
+            room_count,
+            property_name: None,
+            city: None,
+        })
     }
  }
