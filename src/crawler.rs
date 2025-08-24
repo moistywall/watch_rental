@@ -20,16 +20,16 @@ impl fmt::Display for ScraperError {
 
 /// 1件のスクレイピング結果
 #[derive(Debug)]
-pub struct CrawlResult {
+pub struct ScrapeResult {
     url: String,                    // スクレイプ対象 URL
-    room_count: Option<usize>,      // Some(>0): 部屋数あり，Some(0) or None: 空き部屋なし
+    available_rooms: Option<usize>,      // Some(>0): 部屋数あり，Some(0) or None: 空き部屋なし
     property_name: Option<String>,  // 拡張用 物件名
     city: Option<String>,           // 拡張用 地域
 }
 
-impl CrawlResult {
+impl ScrapeResult {
     pub fn format_info(&self) -> Option<String> {
-        match self.room_count {
+        match self.available_rooms {
             Some(count) => {
                 let pname = self.property_name.clone().unwrap_or("未実装".to_string());
                 let city = self.city.clone().unwrap_or("未実装".to_string());
@@ -45,6 +45,7 @@ impl CrawlResult {
 
 pub struct Scraper {
     selector_str: &'static str,
+    client: reqwest::blocking::Client,
 }
 
 impl Scraper {
@@ -54,43 +55,50 @@ impl Scraper {
             SiteType::Suumo => "p > span.fs13",
         };
 
-        Self { selector_str }
+        let client = reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .user_agent("watch-rental/0.1 (+concat)")
+            .build()
+            .expect("client build failed");
+
+        Self {
+            selector_str,
+            client
+        }
     }
 
-    pub fn scrape_url(&self, url: &str) -> Result<CrawlResult, ScraperError> {
-        if url.is_empty() || !url.starts_with("http") {
-            return Err(ScraperError::InvalidUrl(url.to_string()));
-        }
+    pub fn scrape_url(&self, url: &str) -> Result<ScrapeResult, ScraperError> {
+        url::Url::parse(url).map_err(|_| ScraperError::InvalidUrl(url.to_string()))?;
 
-        let body = reqwest::blocking::get(url)
-            .map_err(|e| ScraperError::RequestFailed(url.to_string(), e))?
-            .text()
-            .map_err(|e| ScraperError::RequestFailed(url.to_string(), e))?;
+        let body = self.client
+            .get(url)
+            .send().map_err(|e| ScraperError::RequestFailed(url.to_string(), e))?
+            .text().map_err(|e| ScraperError::RequestFailed(url.to_string(), e))?;
 
         let document = scraper::Html::parse_document(&body);
         let selector = scraper::Selector::parse(self.selector_str)
-            .map_err(|_| ScraperError::ParseError("セレクタが不正".to_string()))?;
+            .map_err(|_| ScraperError::ParseError(format!("セレクタが不正: {}", self.selector_str)))?;
 
-        let mut room_count = None;
+        let mut available_rooms = None;
 
         for e in document.select(&selector) {
             if let Some(text) = e.text().next() {
                 let digit_only: String = text.chars().filter(|c| c.is_ascii_digit()).collect();
                 if let Ok(count) = digit_only.parse::<usize>() {
-                    let buf_room_count = Some(count);
-                    if buf_room_count == Some(0) {
-                        room_count = None;
+                    let buf_available_rooms = Some(count);
+                    if buf_available_rooms == Some(0) {
+                        available_rooms = None;
                     } else {
-                        room_count = buf_room_count;
+                        available_rooms = buf_available_rooms;
                     }
                     break;
                 }
             }
         }
 
-        Ok(CrawlResult {
+        Ok(ScrapeResult {
             url: url.to_string(),
-            room_count,
+            available_rooms,
             property_name: None,
             city: None,
         })

@@ -22,14 +22,13 @@ type UrlList = Vec<String>;
 
 #[derive(Debug)]
 pub struct UrlStore {
-    site: SiteType,
     urls: UrlList,
 }
 
 impl UrlStore {
     pub fn new(site: SiteType) -> Self {
         let urls = Self::load_urls_from_file(site.file_name());
-        Self { site, urls }
+        Self { urls }
     }
 
     fn load_urls_from_file(file_name: &str) -> UrlList {
@@ -39,10 +38,6 @@ impl UrlStore {
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .collect()
-    }
-
-    pub fn get_site(&self) -> SiteType {
-        self.site.clone()
     }
 
     pub fn get_urls(&self) -> UrlList {

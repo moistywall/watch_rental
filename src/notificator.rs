@@ -2,12 +2,10 @@ use crate::{
     crawler::Scraper,
     url_store::{SiteType, UrlStore}
 };
-use dotenvy::dotenv;
-use reqwest::blocking::Client;
 use serde::Serialize;
-use std::{thread, time, env};
+use std::{thread, time};
 
-const ERROR_HOOK: &str = "DISCORD_WEBHOOK_ERROR_URL";
+// const ERROR_HOOK: &str = "DISCORD_WEBHOOK_ERROR_URL"; // 後で、エラー時の送信メッセージを作成する
 const SUUMO_CRAWLER_HOOK: &str = "DISCORD_WEBHOOK_SUUMO_URL";
 const HOMES_CRAWLER_HOOK: &str = "DISCORD_WEBHOOK_HOMES_URL";
 
@@ -16,16 +14,28 @@ struct DiscordWebhook<'a> {
     content: &'a str,
 }
 
-pub struct NotificationInfo {
-    site: SiteType
+pub struct Notifier {
+    site: SiteType,
+    client: reqwest::blocking::Client,
+    webhook: String,
 }
 
-impl NotificationInfo {
+impl Notifier {
     pub fn new(site: SiteType) -> Self {
-        Self { site }
+        dotenvy::dotenv().ok();
+        let webhook = match site {
+            SiteType::Homes => std::env::var(HOMES_CRAWLER_HOOK).expect("..."),
+            SiteType::Suumo => std::env::var(SUUMO_CRAWLER_HOOK).expect("..."),
+        };
+        let client = reqwest::blocking::Client::new();
+        Self {
+            site,
+            client,
+            webhook,
+        }
     }
 
-    pub fn run_notificate(&self) {
+    pub fn send_notifications(&self) {
         let url_store = UrlStore::new(self.site.clone());
         let urls = url_store.get_urls();
         let scraper = Scraper::new(self.site.clone());
@@ -50,36 +60,25 @@ impl NotificationInfo {
             thread::sleep(five_sec);
         }
 
-        let _ = self.notificate(crawl_results.join("\n"));
+        let _ = self.send_messages(&crawl_results);
     }
 
-    fn notificate(&self, message: String) -> Result<(), Box<dyn std::error::Error>> {
-        println!("{:?}", message);
-        let hook_url = self.get_env_data();
-        let client = Client::new();
-        let payload = DiscordWebhook { content: &message };
-
-        println!("{:?}", hook_url);
-
-        let res = client
-            .post(hook_url)
-            .json(&payload)
-            .send()?;
-
-        if res.status().is_success() {
-            println!("通知を送信しました．")
-        } else {
-            println!("通知に失敗しました． status: {}", res.status());
+    fn send_messages(&self, lines: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+        const LIMIT: usize = 2000;
+        let text = lines.join("\n");
+        for chunk in Self::split_discord(&text, LIMIT) {
+            let payload = DiscordWebhook { content: &chunk };
+            let res = self.client.post(&self.webhook).json(&payload).send()?;
+            if !res.status().is_success() {
+                eprintln!("Discord送信失敗: {}", res.status());
+            }
         }
 
         Ok(())
     }
 
-    fn get_env_data(&self) -> String {
-        dotenv().ok();
-        match self.site {
-            SiteType::Homes => env::var(HOMES_CRAWLER_HOOK).expect("webhook URL not found"),
-            SiteType::Suumo => env::var(SUUMO_CRAWLER_HOOK).expect("webhook URL not found"),
-        }
+    fn split_discord(s: &str, limit: usize) -> Vec<String> {
+        s.chars().collect::<Vec<_>>()
+            .chunks(limit).map(|c| c.iter().collect()).collect()
     }
 }
