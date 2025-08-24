@@ -23,12 +23,27 @@ impl fmt::Display for ScraperError {
 pub struct CrawlResult {
     url: String,                    // スクレイプ対象 URL
     room_count: Option<usize>,      // Some(>0): 部屋数あり，Some(0) or None: 空き部屋なし
-    property_name: Option<String>,  // 拡張用
-    city: Option<String>,           // 拡張用
+    property_name: Option<String>,  // 拡張用 物件名
+    city: Option<String>,           // 拡張用 地域
 }
 
-struct Scraper {
-    site: SiteType,
+impl CrawlResult {
+    pub fn format_info(&self) -> Option<String> {
+        match self.room_count {
+            Some(count) => {
+                let pname = self.property_name.clone().unwrap_or("未実装".to_string());
+                let city = self.city.clone().unwrap_or("未実装".to_string());
+                let space = " ";
+                Some(self.url.clone() + space + &count.to_string() + space + &pname + space + &city)
+            }
+            None => {
+                None
+            }
+        }
+    }
+}
+
+pub struct Scraper {
     selector_str: &'static str,
 }
 
@@ -39,10 +54,7 @@ impl Scraper {
             SiteType::Suumo => "p > span.fs13",
         };
 
-        Self {
-            site,
-            selector_str,
-        }
+        Self { selector_str }
     }
 
     pub fn scrape_url(&self, url: &str) -> Result<CrawlResult, ScraperError> {
@@ -65,7 +77,12 @@ impl Scraper {
             if let Some(text) = e.text().next() {
                 let digit_only: String = text.chars().filter(|c| c.is_ascii_digit()).collect();
                 if let Ok(count) = digit_only.parse::<usize>() {
-                    room_count = Some(count);
+                    let buf_room_count = Some(count);
+                    if buf_room_count == Some(0) {
+                        room_count = None;
+                    } else {
+                        room_count = buf_room_count;
+                    }
                     break;
                 }
             }

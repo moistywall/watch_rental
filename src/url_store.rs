@@ -1,10 +1,9 @@
-use std::collections::HashMap;
 use std::fs;
 
 const SUUMO_URLS_FILE: &str = "suumo_watcher.txt";
 const HOMES_URLS_FILE: &str = "homes_watcher.txt";
 
-#[derive(Debug, Eq, PartialEq, Hash)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum SiteType {
     Suumo,
     Homes,
@@ -23,22 +22,14 @@ type UrlList = Vec<String>;
 
 #[derive(Debug)]
 pub struct UrlStore {
-    urls: HashMap<SiteType, UrlList>,
+    site: SiteType,
+    urls: UrlList,
 }
 
 impl UrlStore {
-    pub fn new() -> Self {
-        let kinds = [SiteType::Suumo, SiteType::Homes];
-
-        let urls = kinds
-            .into_iter()
-            .map(|kind| {
-                let list = Self::load_urls_from_file(kind.file_name());
-                (kind, list)
-            })
-            .collect();
-
-        Self { urls }
+    pub fn new(site: SiteType) -> Self {
+        let urls = Self::load_urls_from_file(site.file_name());
+        Self { site, urls }
     }
 
     fn load_urls_from_file(file_name: &str) -> UrlList {
@@ -50,7 +41,11 @@ impl UrlStore {
             .collect()
     }
 
-    pub fn get_urls(&self, site: &SiteType) -> Option<&UrlList> {
-        self.urls.get(site)
+    pub fn get_site(&self) -> SiteType {
+        self.site.clone()
+    }
+
+    pub fn get_urls(&self) -> UrlList {
+        self.urls.clone()
     }
 }

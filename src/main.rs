@@ -1,9 +1,13 @@
 mod url_store;
 mod crawler;
-use crate::url_store::{SiteType, UrlStore};
+mod notificator;
+use notificator::NotificationInfo;
+
+use crate::url_store::SiteType;
 
 fn main() {
-    let url_store = UrlStore::new();
-    println!("{:#?}", url_store.get_urls(&SiteType::Suumo));
-    println!("{:#?}", url_store.get_urls(&SiteType::Homes));
+    let suumo_notificator = NotificationInfo::new(SiteType::Suumo);
+    let homes_notificator = NotificationInfo::new(SiteType::Homes);
+    suumo_notificator.run_notificate();
+    homes_notificator.run_notificate();
 }
