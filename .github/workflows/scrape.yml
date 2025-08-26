@@ -1,0 +1,23 @@
+name: Daily Scraper
+
+on:
+  schedule:
+    - cron: "1 5 * * *"   # UTC
+  workflow_dispatch:      # 手動実行用のボタン追加
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Run scraper
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: cargo run --release
