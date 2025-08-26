@@ -1,7 +1,7 @@
 use std::fs;
 
-const SUUMO_URLS_FILE: &str = "suumo_watcher.txt";
-const HOMES_URLS_FILE: &str = "homes_watcher.txt";
+const SUUMO_URLS_FILE: &str = "data/suumo_watcher.txt";
+const HOMES_URLS_FILE: &str = "data/homes_watcher.txt";
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum SiteType {
